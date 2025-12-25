@@ -11,6 +11,7 @@ public partial class Crawler
     
     protected String? basedFolder = null;
     protected int maxLinksPerPage = 3;
+    protected HashSet<String> visitedUrls = new();
 
     /// <summary>
     /// Method <c>SetBasedFolder</c> sets based folder to store retrieved contents.
@@ -42,8 +43,12 @@ public partial class Crawler
     /// <param name="level">the number of level to recursively access to</param>
     public async Task GetPage(String url, int level)
     {
-        // Your code here
-        // Note: you need this step for recursive operation
+        // Base case: stop if level is negative
+        if (level < 0) return;
+
+        // Base case: stop if already visited
+        if (visitedUrls.Contains(url)) return;
+
         if (basedFolder == null)
         {
             throw new Exception("Please set the value of base folder using SetBasedFolder method first.");
@@ -52,6 +57,10 @@ public partial class Crawler
         {
             throw new ArgumentNullException(nameof(url));
         }
+
+        // Mark as visited
+        visitedUrls.Add(url);
+        Console.WriteLine("Crawling (level {0}): {1}", level, url);
 
         // For simplicity, we will use <c>HttpClient</c> here, but if you want you can try <c>TcpClient</c>
         HttpClient client = new();
@@ -67,6 +76,10 @@ public partial class Crawler
                 String fileName = url.Replace(":", "_").Replace("/", "_").Replace(".", "_") + ".html";
                 // Store content in file
                 File.WriteAllText(basedFolder + "/" + fileName, responseBody);
+
+                // Base case: if level is 0, don't follow links
+                if (level == 0) return;
+
                 // Get list of links from content
                 ISet<String> links = GetLinksFromPage(responseBody);
                 int count = 0;
@@ -76,8 +89,11 @@ public partial class Crawler
                     // We only interested in http/https link
                     if(link.StartsWith("http", StringComparison.InvariantCultureIgnoreCase))
                     {
-                        // Your code here
-                        // Note: It should be recursive operation here
+                        // Recursive call with level - 1
+                        if (!visitedUrls.Contains(link))
+                        {
+                            await GetPage(link, level - 1);
+                        }
 
                         // limit number of links in the page, otherwise it will load lots of data
                         if (++count >= maxLinksPerPage) break;
@@ -124,14 +140,21 @@ public partial class Crawler
     }
 
 }
+
 class Program
 {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
         Crawler cw = new();
-        // Can you improve this code?
-        cw.SetBasedFolder(".");
+        cw.SetBasedFolder("output");
         cw.SetMaxLinksPerPage(5);
-        cw.GetPage("https://dandadan.net/", 2).Wait();
+        
+        // Create output folder if not exists
+        if (!Directory.Exists("output"))
+        {
+            Directory.CreateDirectory("output");
+        }
+        
+        await cw.GetPage("https://dandadan.net/", 2);
     }
 }
